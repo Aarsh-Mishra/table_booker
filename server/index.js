@@ -29,7 +29,7 @@ mongoose.connect(process.env.MONGO).then(async () => {
                 cuisine: "Italian",
                 address: "123 Olive St, Food City",
                 rating: 4.8,
-                priceRange: "$$$",
+                priceRange: "5k",
                 description: "Authentic wood-fired pizzas and handmade pasta.",
                 imageUrl: "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=800&q=80"
             },
@@ -38,7 +38,7 @@ mongoose.connect(process.env.MONGO).then(async () => {
                 cuisine: "Indian",
                 address: "45 Curry Lane, Flavor Town",
                 rating: 4.6,
-                priceRange: "$$",
+                priceRange: "2k",
                 description: "Rich curries and tandoori specials.",
                 imageUrl: "https://images.unsplash.com/photo-1585937421612-70a008356f36?auto=format&fit=crop&w=800&q=80"
             },
@@ -47,7 +47,7 @@ mongoose.connect(process.env.MONGO).then(async () => {
                 cuisine: "Japanese",
                 address: "88 Blossom Ave, Zen District",
                 rating: 4.9,
-                priceRange: "$$$$",
+                priceRange: "10k",
                 description: "Premium sushi and sashimi experiences.",
                 imageUrl: "https://images.unsplash.com/photo-1579871494447-9811cf80d66c?auto=format&fit=crop&w=800&q=80"
             }
@@ -73,7 +73,7 @@ const getWeather = async (dateStr, location) => {
     if (location && location.lat && location.lon) {
         url = `https://api.openweathermap.org/data/2.5/forecast?lat=${location.lat}&lon=${location.lon}&appid=${apiKey}&units=metric`;
     } else {
-        const city = 'New York'; // Default fallback
+        const city = 'Trichy'; // Default fallback
         url = `https://api.openweathermap.org/data/2.5/forecast?q=${city}&appid=${apiKey}&units=metric`;
     }
 
@@ -156,26 +156,29 @@ app.post('/api/chat', async (req, res) => {
     CURRENT USER MESSAGE: "${message}"
     
     YOUR GOAL:
-    Collect: Name, Date, Time, Guests, Seating, Special Requests.
+    You are a restaurant booking assistant.
     
-    LOGIC:
-    1. If the user asks for recommendations and NO specific restaurant is selected, suggest they browse the list or ask what cuisine they like.
-    2. If a restaurant is selected (context provided), act as the host for that specific place.
-    3. Collect booking details.
-    4. If ALL details are present AND user confirms, set intent to "confirmed".
+    CRITICAL RULES:
+    1. **RESTAURANT CHECK**: Do you know which restaurant the user wants? 
+       - If "contextRestaurantId" was provided, you know it.
+       - If NOT, check the history. Has the user explicitly named a restaurant?
+       - If NO restaurant is identified, your ONLY goal is to ask: "Which restaurant would you like to book at?" DO NOT ask for date/time yet.
+    
+    2. Once the restaurant is known, collect: Name, Date, Time, Guests, Seating.
+    3. If ALL details are present AND user confirms, set intent to "confirmed".
 
     Return JSON ONLY:
     {
       "reply": "Your response.",
       "bookingDetails": {
-        "name": "extracted or null",
+        "restaurantName": "extracted restaurant name or null",
+        "name": "extracted user name or null",
         "date": "extracted (YYYY-MM-DD) or null",
         "time": "extracted or null",
         "guests": "extracted or null",
-        "seating": "extracted or null",
-        "specialRequests": "extracted or null"
+        "seating": "extracted or null"
       },
-      "intent": "booking_request" | "confirmation_request" | "confirmed"
+      "intent": "restaurant_selection" | "booking_request" | "confirmation_request" | "confirmed"
     }
     `;
 
