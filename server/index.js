@@ -19,62 +19,58 @@ app.use(cors());
 mongoose.connect(process.env.MONGO).then(async () => {
     console.log('Connected to MongoDB!');
     
-    // SEED DATA: Ensure we have at least 5 restaurants
-    const count = await Restaurant.countDocuments();
-    if (count < 5) {
-        console.log("Seeding restaurants...");
-        // Clear existing to avoid duplicates if re-seeding
-        await Restaurant.deleteMany({}); 
-        
-        await Restaurant.insertMany([
-            {
-                name: "Bella Italia",
-                cuisine: "Italian",
-                address: "123 Olive St, Food City",
-                rating: 4.8,
-                priceRange: "$$$",
-                description: "Authentic wood-fired pizzas and handmade pasta.",
-                imageUrl: "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=800&q=80"
-            },
-            {
-                name: "Spice Route",
-                cuisine: "Indian",
-                address: "45 Curry Lane, Flavor Town",
-                rating: 4.6,
-                priceRange: "$$",
-                description: "Rich curries and tandoori specials.",
-                imageUrl: "https://images.unsplash.com/photo-1585937421612-70a008356f36?auto=format&fit=crop&w=800&q=80"
-            },
-            {
-                name: "Sushi Zen",
-                cuisine: "Japanese",
-                address: "88 Blossom Ave, Zen District",
-                rating: 4.9,
-                priceRange: "$$$$",
-                description: "Premium sushi and sashimi experiences.",
-                imageUrl: "https://images.unsplash.com/photo-1579871494447-9811cf80d66c?auto=format&fit=crop&w=800&q=80"
-            },
-            {
-                name: "The Burger Joint",
-                cuisine: "American",
-                address: "101 Grill Rd, Meatpacking Dist",
-                rating: 4.4,
-                priceRange: "$",
-                description: "Juicy handcrafted burgers and milkshakes.",
-                imageUrl: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=800&q=80"
-            },
-            {
-                name: "El Camino",
-                cuisine: "Mexican",
-                address: "55 Fiesta Way, Southside",
-                rating: 4.7,
-                priceRange: "$$",
-                description: "Authentic street tacos and margaritas.",
-                imageUrl: "https://images.unsplash.com/photo-1565299585323-38d6b0865b47?auto=format&fit=crop&w=800&q=80"
-            }
-        ]);
-        console.log("Restaurants seeded!");
-    }
+    // SEED DATA: Force reseed
+    console.log("Clearing and reseeding restaurants...");
+    await Restaurant.deleteMany({}); 
+    
+    await Restaurant.insertMany([
+        {
+            name: "Bella Italia",
+            cuisine: "Italian",
+            address: "123 Olive St, Food City",
+            rating: 4.8,
+            priceRange: "$$$",
+            description: "Authentic wood-fired pizzas and pasta.",
+            imageUrl: "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=800&q=80"
+        },
+        {
+            name: "Spice Route",
+            cuisine: "Indian",
+            address: "45 Curry Lane, Flavor Town",
+            rating: 4.6,
+            priceRange: "$$",
+            description: "Rich curries and tandoori specials.",
+            imageUrl: "https://images.unsplash.com/photo-1565557623262-b51c2513a641?auto=format&fit=crop&w=800&q=80"
+        },
+        {
+            name: "Sushi Zen",
+            cuisine: "Japanese",
+            address: "88 Blossom Ave, Zen District",
+            rating: 4.9,
+            priceRange: "$$$$",
+            description: "Premium sushi and sashimi experiences.",
+            imageUrl: "https://images.unsplash.com/photo-1579871494447-9811cf80d66c?auto=format&fit=crop&w=800&q=80"
+        },
+        {
+            name: "The Burger Joint",
+            cuisine: "American",
+            address: "101 Grill Rd, Meatpacking Dist",
+            rating: 4.4,
+            priceRange: "$",
+            description: "Juicy handcrafted burgers and milkshakes.",
+            imageUrl: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=800&q=80"
+        },
+        {
+            name: "El Camino",
+            cuisine: "Mexican",
+            address: "55 Fiesta Way, Southside",
+            rating: 4.7,
+            priceRange: "$$",
+            description: "Authentic street tacos and margaritas.",
+            imageUrl: "https://images.unsplash.com/photo-1565299585323-38d6b0865b47?auto=format&fit=crop&w=800&q=80"
+        }
+    ]);
+    console.log("Restaurants seeded!")
 
 }).catch((err) => {
     console.error('MongoDB Connection Error:', err);
@@ -275,6 +271,16 @@ app.get('/api/bookings', async (req, res) => {
     res.json(bookings);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch bookings" });
+  }
+});
+
+app.get('/api/bookings/:id', async (req, res) => {
+  try {
+    const booking = await Booking.findById(req.params.id).populate('restaurantId');
+    if (!booking) return res.status(404).json({ error: "Booking not found" });
+    res.json(booking);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch booking" });
   }
 });
 
