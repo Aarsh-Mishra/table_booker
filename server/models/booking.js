@@ -1,6 +1,13 @@
 import mongoose from 'mongoose';
 
 const bookingSchema = new mongoose.Schema({
+ 
+  restaurantId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Restaurant', 
+    required: true,
+  },
+  // -----------------
   customerName: {
     type: String,
     required: true,
@@ -10,11 +17,11 @@ const bookingSchema = new mongoose.Schema({
     required: true,
   },
   bookingDate: {
-    type: Date, // Stores both date and time ideally, or just date
+    type: Date, 
     required: true,
   },
   bookingTime: {
-    type: String, // e.g., "19:00" or "7 PM"
+    type: String, 
     required: true,
   },
   cuisinePreference: {
@@ -25,7 +32,6 @@ const bookingSchema = new mongoose.Schema({
     type: String,
     default: 'None',
   },
-  // We store the weather data we fetched at the time of booking
   weatherInfo: {
     type: Object, 
     default: {},
@@ -41,7 +47,7 @@ const bookingSchema = new mongoose.Schema({
     default: 'Pending',
   },
 }, {
-  timestamps: true, // Automatically adds createdAt and updatedAt
+  timestamps: true, 
 });
 
 const Booking = mongoose.model('Booking', bookingSchema);
