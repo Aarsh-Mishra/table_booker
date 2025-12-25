@@ -11,13 +11,13 @@ function App() {
         {/* Navigation Header */}
         <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
           <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
-            <Link to="/" className="flex items-center gap-2 text-primary hover:opacity-80 transition-opacity">
+            <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
               <span className="text-2xl">🍽️</span>
-              <h1 className="text-xl font-bold tracking-tight">Vaiu Bistro</h1>
+              <h1 className="text-xl font-bold tracking-tight text-gray-900">Restaurant Table Booker</h1>
             </Link>
             <nav className="flex gap-4">
-              <Link to="/" className="text-sm font-medium text-gray-600 hover:text-accent transition-colors">Bookings</Link>
-              <Link to="/chat" className="text-sm font-medium text-gray-600 hover:text-accent transition-colors">AI Agent</Link>
+              <Link to="/" className="text-sm font-medium text-gray-600 hover:text-black transition-colors">Restaurants</Link>
+              {/* We can add a My Bookings route later */}
             </nav>
           </div>
         </header>
