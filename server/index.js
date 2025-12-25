@@ -3,80 +3,141 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import Booking from './models/booking.js';
+import Restaurant from './models/restaurant.js'; // Import new model
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import axios from 'axios';
 
 // --- Configuration ---
-dotenv.config(); // Load environment variables from .env
+dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// --- Middleware ---
-app.use(express.json()); // Allow parsing JSON bodies
-app.use(cors()); // Enable CORS for frontend communication
+app.use(express.json());
+app.use(cors());
 
-// --- Database Connection ---
-mongoose.connect(process.env.MONGO).then(() => {
+// --- Database Connection & Seeding ---
+mongoose.connect(process.env.MONGO).then(async () => {
     console.log('Connected to MongoDB!');
+    
+    // SEED DATA: If no restaurants exist, create some defaults
+    const count = await Restaurant.countDocuments();
+    if (count === 0) {
+        console.log("Seeding initial restaurants...");
+        await Restaurant.insertMany([
+            {
+                name: "Bella Italia",
+                cuisine: "Italian",
+                address: "123 Olive St, Food City",
+                rating: 4.8,
+                priceRange: "$$$",
+                description: "Authentic wood-fired pizzas and handmade pasta.",
+                imageUrl: "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=800&q=80"
+            },
+            {
+                name: "Spice Route",
+                cuisine: "Indian",
+                address: "45 Curry Lane, Flavor Town",
+                rating: 4.6,
+                priceRange: "$$",
+                description: "Rich curries and tandoori specials.",
+                imageUrl: "https://images.unsplash.com/photo-1585937421612-70a008356f36?auto=format&fit=crop&w=800&q=80"
+            },
+            {
+                name: "Sushi Zen",
+                cuisine: "Japanese",
+                address: "88 Blossom Ave, Zen District",
+                rating: 4.9,
+                priceRange: "$$$$",
+                description: "Premium sushi and sashimi experiences.",
+                imageUrl: "https://images.unsplash.com/photo-1579871494447-9811cf80d66c?auto=format&fit=crop&w=800&q=80"
+            }
+        ]);
+        console.log("Restaurants seeded!");
+    }
+
 }).catch((err) => {
     console.error('MongoDB Connection Error:', err);
 });
 
-// --- AI Setup (Gemini) ---
+// --- AI Setup ---
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-// We use the flash model for faster response times suitable for voice agents
 const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-// --- Helper Function: Get Real-Time Weather ---
-/**
- * Fetches weather forecast from OpenWeatherMap.
- * 1. Uses dynamic Lat/Lon if provided by the client.
- * 2. Filters the 5-day forecast list to find the specific booking date.
- */
+// --- Helper: Weather ---
 const getWeather = async (dateStr, location) => {
   try {
     const apiKey = process.env.OPENWEATHER_API_KEY;
-    let url = '';
+    if (!apiKey) return null; // Handle missing key gracefully
 
-    // Logic: Use user's geo-coordinates if allowed, else fallback to a default city
+    let url = '';
     if (location && location.lat && location.lon) {
         url = `https://api.openweathermap.org/data/2.5/forecast?lat=${location.lat}&lon=${location.lon}&appid=${apiKey}&units=metric`;
     } else {
-        const city = 'Trichy'; // Default fallback
+        const city = 'New York'; // Default fallback
         url = `https://api.openweathermap.org/data/2.5/forecast?q=${city}&appid=${apiKey}&units=metric`;
     }
 
     const response = await axios.get(url);
     const list = response.data.list;
-
-    // Logic: OpenWeatherMap returns data in 3-hour intervals. 
-    // We search the array for an entry that matches the user's requested booking date (YYYY-MM-DD).
     const targetDate = dateStr; 
     const forecast = list.find(item => item.dt_txt.includes(targetDate));
 
-    // If the date is too far in the future (beyond 5 days), API won't have it.
     if (!forecast) return null;
 
     return {
-      condition: forecast.weather[0].description, // e.g., "light rain"
+      condition: forecast.weather[0].description,
       temp: forecast.main.temp,
       found: true
     };
-
   } catch (error) {
-    console.error("Weather API Error:", error.message);
+    console.error("Weather API Error (Ignoring):", error.message);
     return null;
   }
 };
 
-// --- CORE ROUTE: AI Chat Processing ---
+// --- NEW ROUTES: Restaurant Discovery ---
+
+// 1. Get All Restaurants
+app.get('/api/restaurants', async (req, res) => {
+    try {
+        const restaurants = await Restaurant.find();
+        res.json(restaurants);
+    } catch (err) {
+        res.status(500).json({ error: "Failed to fetch restaurants" });
+    }
+});
+
+// 2. Get Single Restaurant
+app.get('/api/restaurants/:id', async (req, res) => {
+    try {
+        const restaurant = await Restaurant.findById(req.params.id);
+        if (!restaurant) return res.status(404).json({ error: "Restaurant not found" });
+        res.json(restaurant);
+    } catch (err) {
+        res.status(500).json({ error: "Error fetching restaurant" });
+    }
+});
+
+// --- CORE ROUTE: AI Chat Processing (UPDATED) ---
 app.post('/api/chat', async (req, res) => {
   try {
-    // We receive the user's message, conversation history, and their location
-    const { message, history, userLocation } = req.body;
+    // contextRestaurantId: The ID of the restaurant the user is CURRENTLY looking at (if any)
+    const { message, history, userLocation, contextRestaurantId } = req.body;
 
-    // 1. Context Construction
-    // We format previous messages so the AI knows what has already been said.
+    // Fetch the specific restaurant details if an ID is provided
+    let restaurantContext = "You are a general restaurant booking assistant. Users can book at various restaurants.";
+    if (contextRestaurantId) {
+        const restaurant = await Restaurant.findById(contextRestaurantId);
+        if (restaurant) {
+            restaurantContext = `You are the booking assistant for "${restaurant.name}". 
+            Cuisine: ${restaurant.cuisine}. 
+            Address: ${restaurant.address}. 
+            Price: ${restaurant.priceRange}.
+            Description: ${restaurant.description}.`;
+        }
+    }
+
+    // Format History
     let conversationContext = "";
     if (history && history.length > 0) {
         conversationContext = history.map(msg => {
@@ -85,10 +146,8 @@ app.post('/api/chat', async (req, res) => {
         }).join("\n");
     }
 
-    // 2. System Prompt Engineering
-    // This tells the AI its role, the current date, and the strict JSON format it must output.
     const systemPrompt = `
-    You are a helpful restaurant booking assistant for "Vaiu Bistro".
+    ${restaurantContext}
     Today's date is ${new Date().toISOString().split('T')[0]}.
     
     HISTORY:
@@ -97,61 +156,46 @@ app.post('/api/chat', async (req, res) => {
     CURRENT USER MESSAGE: "${message}"
     
     YOUR GOAL:
-    Collect: Name, Date, Time, Guests, Seating (Indoor/Outdoor), Cuisine, Special Requests.
-
-    LOGIC:
-    1. Compare HISTORY and CURRENT MESSAGE to find details.
-    2. If a detail is missing, ASK for it politely.
-    3. If ALL details are present but user hasn't explicitly said "yes" or "confirm" to finalize, set intent to "confirmation_request".
-    4. If ALL details are present AND the user says "yes", "confirm", "go ahead", or similar to finalize, set intent to "confirmed".
+    Collect: Name, Date, Time, Guests, Seating, Special Requests.
     
+    LOGIC:
+    1. If the user asks for recommendations and NO specific restaurant is selected, suggest they browse the list or ask what cuisine they like.
+    2. If a restaurant is selected (context provided), act as the host for that specific place.
+    3. Collect booking details.
+    4. If ALL details are present AND user confirms, set intent to "confirmed".
+
     Return JSON ONLY:
     {
-      "reply": "Your conversational response.",
+      "reply": "Your response.",
       "bookingDetails": {
         "name": "extracted or null",
         "date": "extracted (YYYY-MM-DD) or null",
         "time": "extracted or null",
         "guests": "extracted or null",
         "seating": "extracted or null",
-        "cuisine": "extracted or null",
         "specialRequests": "extracted or null"
       },
       "intent": "booking_request" | "confirmation_request" | "confirmed"
     }
     `;
 
-    // 3. Generate AI Response
     const result = await model.generateContent(systemPrompt);
     const response = await result.response;
-    // Clean up the response (sometimes AI adds markdown code blocks)
     let text = response.text().replace(/```json/g, '').replace(/```/g, '').trim();
     const aiData = JSON.parse(text);
 
-    // 4. Smart Weather Logic
-    // We only fetch weather if we have a valid date.
+    // Weather Logic (Keep existing logic)
     if (aiData.bookingDetails.date) {
-        // Check History: Has the bot ALREADY mentioned the weather? 
-        // We filter the history to stop the bot from repeating the forecast endlessly.
         const weatherAlreadyDiscussed = history?.some(msg => 
             msg.sender === 'bot' && 
             (msg.text.toLowerCase().includes('forecast') || msg.text.toLowerCase().includes('weather'))
         );
         
         if (!weatherAlreadyDiscussed) {
-             // Pass the user's location to our helper function
              const weather = await getWeather(aiData.bookingDetails.date, userLocation);
-             
-             // If valid weather data is found, append it to the AI's reply
              if (weather && weather.found) {
-                 // Double check: AI might have hallucinated a weather report in "reply" already.
-                 if (!aiData.reply.toLowerCase().includes('weather') && !aiData.reply.toLowerCase().includes('forecast')) {
-                     aiData.reply += ` By the way, the forecast for that day is ${weather.condition} with ${Math.round(weather.temp)}°C.`;
-                     
-                     // Logic: Suggest Indoor seating if it is raining
-                     if (weather.condition.includes('rain') && !aiData.bookingDetails.seating) {
-                         aiData.reply += " I recommend indoor seating.";
-                     }
+                 if (!aiData.reply.toLowerCase().includes('weather')) {
+                     aiData.reply += ` Forecast: ${weather.condition}, ${Math.round(weather.temp)}°C.`;
                  }
              }
         }
@@ -165,58 +209,45 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-// --- CRUD ROUTES for Booking Management ---
+// --- CRUD ROUTES (UPDATED) ---
 
-// Create a new booking (Triggered automatically by frontend on 'confirmed' intent)
 app.post('/api/bookings', async (req, res) => {
   try {
-    const bookingData = req.body;
-    const newBooking = new Booking(bookingData);
+    const { restaurantId, ...bookingData } = req.body;
+    
+    // Validate Restaurant ID
+    if (!restaurantId) {
+        return res.status(400).json({ error: "Restaurant ID is required for booking" });
+    }
+
+    const newBooking = new Booking({ ...bookingData, restaurantId });
     await newBooking.save();
     res.status(201).json({ message: "Booking confirmed!", booking: newBooking });
   } catch (error){
+    console.error(error);
     res.status(500).json({ error: "Failed to create booking" });
   }
 });
 
-// Get all bookings (For the Dashboard View)
 app.get('/api/bookings', async (req, res) => {
   try {
-    const bookings = await Booking.find().sort({ createdAt: -1 }); // Newest first
+    // Populate restaurant details so we can show the name in the dashboard
+    const bookings = await Booking.find().populate('restaurantId').sort({ createdAt: -1 });
     res.json(bookings);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch bookings" });
   }
 });
 
-// Get a specific booking by ID
-app.get('/api/bookings/:id', async (req, res) => {
-  try {
-    const booking = await Booking.findById(req.params.id);
-    if (!booking) return res.status(404).json({ error: "Booking not found" });
-    res.json(booking);
-  } catch (error) {
-    res.status(500).json({ error: "Error fetching booking" });
-  }
-});
-
-// Cancel/Delete a booking
 app.delete('/api/bookings/:id', async (req, res) => {
   try {
-    const deletedBooking = await Booking.findByIdAndDelete(req.params.id);
-    if (!deletedBooking) return res.status(404).json({ error: "Booking not found" });
-    res.json({ message: "Booking cancelled successfully" });
+    await Booking.findByIdAndDelete(req.params.id);
+    res.json({ message: "Booking cancelled" });
   } catch (error) {
-    res.status(500).json({ error: "Error cancelling booking" });
+    res.status(500).json({ error: "Error cancelling" });
   }
 });
 
-// Base Route
-app.get('/', (req, res) => {
-  res.send('Server is running!');
-});
-
-// Start Server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
