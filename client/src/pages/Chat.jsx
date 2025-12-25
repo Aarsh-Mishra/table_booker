@@ -91,10 +91,11 @@ const Chat = () => {
     }
   };
 
+
   const handleAutoSave = async (details) => {
     try {
       await api.post('/bookings', {
-        restaurantId: restaurantId, // Ensure the booking is linked to the restaurant
+        restaurantId: restaurantId, 
         customerName: details.name || "Guest",
         numberOfGuests: details.guests || 2,
         bookingDate: details.date || new Date(),
@@ -104,13 +105,17 @@ const Chat = () => {
         seatingPreference: details.seating || "Any",
         status: "Confirmed"
       });
-      const successMsg = "Booking confirmed! Redirecting...";
+      
+      const successMsg = "Booking confirmed! Redirecting to your bookings...";
       setMessages(prev => [...prev, { sender: 'bot', text: successMsg }]);
       speak(successMsg);
-      setTimeout(() => navigate('/'), 4000);
+      
+      // Redirect to the new My Bookings page
+      setTimeout(() => navigate('/my-bookings'), 2000); 
+
     } catch (err) {
       console.error(err);
-      setMessages(prev => [...prev, { sender: 'bot', text: "There was an error saving your booking. Please try again." }]);
+      setMessages(prev => [...prev, { sender: 'bot', text: "Error saving booking." }]);
     }
   };
 
