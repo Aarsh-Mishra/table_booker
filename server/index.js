@@ -3,7 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import Booking from './models/booking.js';
-import Restaurant from './models/restaurant.js'; // Import new model
+import Restaurant from './models/restaurant.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import axios from 'axios';
 
@@ -19,17 +19,20 @@ app.use(cors());
 mongoose.connect(process.env.MONGO).then(async () => {
     console.log('Connected to MongoDB!');
     
-    // SEED DATA: If no restaurants exist, create some defaults
+    // SEED DATA: Ensure we have at least 5 restaurants
     const count = await Restaurant.countDocuments();
-    if (count === 0) {
-        console.log("Seeding initial restaurants...");
+    if (count < 5) {
+        console.log("Seeding restaurants...");
+        // Clear existing to avoid duplicates if re-seeding
+        await Restaurant.deleteMany({}); 
+        
         await Restaurant.insertMany([
             {
                 name: "Bella Italia",
                 cuisine: "Italian",
                 address: "123 Olive St, Food City",
                 rating: 4.8,
-                priceRange: "5k",
+                priceRange: "$$$",
                 description: "Authentic wood-fired pizzas and handmade pasta.",
                 imageUrl: "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=800&q=80"
             },
@@ -38,7 +41,7 @@ mongoose.connect(process.env.MONGO).then(async () => {
                 cuisine: "Indian",
                 address: "45 Curry Lane, Flavor Town",
                 rating: 4.6,
-                priceRange: "2k",
+                priceRange: "$$",
                 description: "Rich curries and tandoori specials.",
                 imageUrl: "https://images.unsplash.com/photo-1585937421612-70a008356f36?auto=format&fit=crop&w=800&q=80"
             },
@@ -47,9 +50,27 @@ mongoose.connect(process.env.MONGO).then(async () => {
                 cuisine: "Japanese",
                 address: "88 Blossom Ave, Zen District",
                 rating: 4.9,
-                priceRange: "10k",
+                priceRange: "$$$$",
                 description: "Premium sushi and sashimi experiences.",
                 imageUrl: "https://images.unsplash.com/photo-1579871494447-9811cf80d66c?auto=format&fit=crop&w=800&q=80"
+            },
+            {
+                name: "The Burger Joint",
+                cuisine: "American",
+                address: "101 Grill Rd, Meatpacking Dist",
+                rating: 4.4,
+                priceRange: "$",
+                description: "Juicy handcrafted burgers and milkshakes.",
+                imageUrl: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=800&q=80"
+            },
+            {
+                name: "El Camino",
+                cuisine: "Mexican",
+                address: "55 Fiesta Way, Southside",
+                rating: 4.7,
+                priceRange: "$$",
+                description: "Authentic street tacos and margaritas.",
+                imageUrl: "https://images.unsplash.com/photo-1565299585323-38d6b0865b47?auto=format&fit=crop&w=800&q=80"
             }
         ]);
         console.log("Restaurants seeded!");
@@ -67,14 +88,13 @@ const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 const getWeather = async (dateStr, location) => {
   try {
     const apiKey = process.env.OPENWEATHER_API_KEY;
-    if (!apiKey) return null; // Handle missing key gracefully
+    if (!apiKey) return null;
 
     let url = '';
     if (location && location.lat && location.lon) {
         url = `https://api.openweathermap.org/data/2.5/forecast?lat=${location.lat}&lon=${location.lon}&appid=${apiKey}&units=metric`;
     } else {
-        const city = 'Trichy'; // Default fallback
-        url = `https://api.openweathermap.org/data/2.5/forecast?q=${city}&appid=${apiKey}&units=metric`;
+        url = `https://api.openweathermap.org/data/2.5/forecast?q=New York&appid=${apiKey}&units=metric`;
     }
 
     const response = await axios.get(url);
@@ -90,14 +110,12 @@ const getWeather = async (dateStr, location) => {
       found: true
     };
   } catch (error) {
-    console.error("Weather API Error (Ignoring):", error.message);
     return null;
   }
 };
 
-// --- NEW ROUTES: Restaurant Discovery ---
+// --- ROUTES ---
 
-// 1. Get All Restaurants
 app.get('/api/restaurants', async (req, res) => {
     try {
         const restaurants = await Restaurant.find();
@@ -107,7 +125,6 @@ app.get('/api/restaurants', async (req, res) => {
     }
 });
 
-// 2. Get Single Restaurant
 app.get('/api/restaurants/:id', async (req, res) => {
     try {
         const restaurant = await Restaurant.findById(req.params.id);
@@ -118,26 +135,31 @@ app.get('/api/restaurants/:id', async (req, res) => {
     }
 });
 
-// --- CORE ROUTE: AI Chat Processing (UPDATED) ---
+// --- CORE ROUTE: AI Chat Processing ---
 app.post('/api/chat', async (req, res) => {
   try {
-    // contextRestaurantId: The ID of the restaurant the user is CURRENTLY looking at (if any)
     const { message, history, userLocation, contextRestaurantId } = req.body;
 
-    // Fetch the specific restaurant details if an ID is provided
-    let restaurantContext = "You are a general restaurant booking assistant. Users can book at various restaurants.";
+    // 1. Fetch ALL Restaurants for the AI's "Brain"
+    // We create a directory string so the AI knows what options exist
+    const allRestaurants = await Restaurant.find({}, 'name cuisine rating priceRange');
+    const restaurantDirectory = allRestaurants.map(r => 
+        `- ${r.name} (Cuisine: ${r.cuisine}, Rating: ${r.rating}★, Price: ${r.priceRange})`
+    ).join('\n');
+
+    // 2. Determine Context
+    let restaurantContext = `You are a restaurant concierge. 
+    Here is the list of restaurants available in your system:
+    ${restaurantDirectory}`;
+
     if (contextRestaurantId) {
         const restaurant = await Restaurant.findById(contextRestaurantId);
         if (restaurant) {
-            restaurantContext = `You are the booking assistant for "${restaurant.name}". 
-            Cuisine: ${restaurant.cuisine}. 
-            Address: ${restaurant.address}. 
-            Price: ${restaurant.priceRange}.
-            Description: ${restaurant.description}.`;
+            restaurantContext += `\n\nUSER CONTEXT: The user is currently looking at "${restaurant.name}". Assume this is the restaurant they want unless they say otherwise.`;
         }
     }
 
-    // Format History
+    // 3. Format History
     let conversationContext = "";
     if (history && history.length > 0) {
         conversationContext = history.map(msg => {
@@ -155,30 +177,37 @@ app.post('/api/chat', async (req, res) => {
     
     CURRENT USER MESSAGE: "${message}"
     
-    YOUR GOAL:
-    You are a restaurant booking assistant.
-    
-    CRITICAL RULES:
-    1. **RESTAURANT CHECK**: Do you know which restaurant the user wants? 
-       - If "contextRestaurantId" was provided, you know it.
-       - If NOT, check the history. Has the user explicitly named a restaurant?
-       - If NO restaurant is identified, your ONLY goal is to ask: "Which restaurant would you like to book at?" DO NOT ask for date/time yet.
-    
-    2. Once the restaurant is known, collect: Name, Date, Time, Guests, Seating.
-    3. If ALL details are present AND user confirms, set intent to "confirmed".
+    YOUR GOAL: Help the user discover restaurants or book a table.
+
+    RULES FOR DISCOVERY:
+    1. If the user asks for "Italian food" or "best rated places", use the 'list of restaurants' provided above to make recommendations.
+    2. Always suggest at least 2-3 options if the query is general.
+
+    RULES FOR BOOKING (Strict):
+    To make a booking, you MUST explicitly collect ALL of the following details. Do not assume them.
+    1. **Restaurant Name**: (Which one?)
+    2. **Customer Name**: (Ask: "What is the name for the reservation?")
+    3. **Date & Time**: (When?)
+    4. **Number of Guests**: (How many people?)
+    5. **Seating Preference**: (Ask: "Would you prefer Indoor or Outdoor seating?")
+
+    LOGIC:
+    - If any of the 5 items above are missing, ASK for them.
+    - If the user asks "Do you have Italian?", say "Yes, we have Bella Italia..." and ask if they want to book there.
+    - Only set "intent" to "confirmed" when ALL 5 details are collected AND the user says "Yes/Confirm".
 
     Return JSON ONLY:
     {
       "reply": "Your response.",
       "bookingDetails": {
-        "restaurantName": "extracted restaurant name or null",
-        "name": "extracted user name or null",
+        "restaurantName": "extracted or null",
+        "name": "extracted or null",
         "date": "extracted (YYYY-MM-DD) or null",
         "time": "extracted or null",
         "guests": "extracted or null",
         "seating": "extracted or null"
       },
-      "intent": "restaurant_selection" | "booking_request" | "confirmation_request" | "confirmed"
+      "intent": "discovery" | "booking_request" | "confirmation_request" | "confirmed"
     }
     `;
 
@@ -187,7 +216,7 @@ app.post('/api/chat', async (req, res) => {
     let text = response.text().replace(/```json/g, '').replace(/```/g, '').trim();
     const aiData = JSON.parse(text);
 
-    // Weather Logic (Keep existing logic)
+    // Weather Logic
     if (aiData.bookingDetails.date) {
         const weatherAlreadyDiscussed = history?.some(msg => 
             msg.sender === 'bot' && 
@@ -199,6 +228,9 @@ app.post('/api/chat', async (req, res) => {
              if (weather && weather.found) {
                  if (!aiData.reply.toLowerCase().includes('weather')) {
                      aiData.reply += ` Forecast: ${weather.condition}, ${Math.round(weather.temp)}°C.`;
+                     if (weather.condition.includes('rain') && !aiData.bookingDetails.seating) {
+                        aiData.reply += " Outdoor seating might be wet, I recommend Indoor.";
+                     }
                  }
              }
         }
@@ -212,18 +244,23 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-// --- CRUD ROUTES (UPDATED) ---
-
 app.post('/api/bookings', async (req, res) => {
   try {
-    const { restaurantId, ...bookingData } = req.body;
+    const { restaurantId, restaurantName, ...bookingData } = req.body;
     
-    // Validate Restaurant ID
-    if (!restaurantId) {
-        return res.status(400).json({ error: "Restaurant ID is required for booking" });
+    let targetRestaurantId = restaurantId;
+
+    // If we only have the name (from Voice Chat), find the ID
+    if (!targetRestaurantId && restaurantName) {
+        const r = await Restaurant.findOne({ name: new RegExp(restaurantName, 'i') });
+        if (r) targetRestaurantId = r._id;
     }
 
-    const newBooking = new Booking({ ...bookingData, restaurantId });
+    if (!targetRestaurantId) {
+        return res.status(400).json({ error: "Restaurant not identified" });
+    }
+
+    const newBooking = new Booking({ ...bookingData, restaurantId: targetRestaurantId });
     await newBooking.save();
     res.status(201).json({ message: "Booking confirmed!", booking: newBooking });
   } catch (error){
@@ -234,7 +271,6 @@ app.post('/api/bookings', async (req, res) => {
 
 app.get('/api/bookings', async (req, res) => {
   try {
-    // Populate restaurant details so we can show the name in the dashboard
     const bookings = await Booking.find().populate('restaurantId').sort({ createdAt: -1 });
     res.json(bookings);
   } catch (error) {
