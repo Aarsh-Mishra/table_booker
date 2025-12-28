@@ -1,23 +1,51 @@
 # 🍽️ Vaiu Bistro Voice Agent
 
-An intelligent, voice-activated restaurant booking assistant built with the MERN stack (MongoDB, Express, React, Node.js). This application allows users to book tables via natural conversation, offers real-time weather-based seating suggestions, and includes an admin dashboard to manage bookings.
+An intelligent, voice-activated restaurant booking assistant built with the MERN stack (MongoDB, Express, React, Node.js). Users can discover restaurants, chat with an AI concierge, and confirm reservations. Weather data helps suggest indoor vs outdoor seating.
+
+---
+
+## 📁 Project Structure
+
+```
+table_booker/
+├── README.md
+├── client/
+│   ├── package.json
+│   ├── vite.config.js
+│   ├── tailwind.config.js
+│   ├── public/
+│   └── src/
+│       ├── api.js
+│       ├── App.jsx
+│       ├── pages/
+│       │   ├── Home.jsx
+│       │   ├── Chat.jsx
+│       │   ├── MyBookings.jsx
+│       │   └── BookingDetails.jsx
+│       └── assets/
+└── server/
+	├── package.json
+	├── index.js
+	└── models/
+		├── booking.js
+		└── restaurant.js
+```
 
 ---
 
 ## 🚀 Key Features
 
-- 🗣️ Voice Interaction: Seamless Speech-to-Text (Input) and Text-to-Speech (Response) using the Web Speech API.
-- 🤖 AI-Powered: Powered by Google Gemini 2.0 Flash for natural language understanding and smart data extraction.
-- ☀️ Weather Integration: Fetches real-time forecasts via OpenWeatherMap to intelligently suggest Indoor vs. Outdoor seating.
-- 📍 Location Aware: Automatically detects user location for accurate local weather data.
-- ⚡ Auto-Confirmation: Detects user intent to "confirm" and saves bookings automatically to the database.
-- 📊 Admin Dashboard: A visual interface to view all bookings and cancel/delete them as needed.
+- 🗣️ Voice-like chat: Conversational booking flow handled by an AI agent.
+- 🤖 AI-powered: Uses Google Gemini 2.0 Flash via `@google/generative-ai`.
+- ☀️ Weather-based suggestions: Integrates OpenWeatherMap to recommend seating.
+- 📍 Location-aware: Accepts client-provided coordinates for local forecasts.
+- 🧾 Bookings dashboard: View and cancel existing reservations.
 
 ---
 
 ## 🛠️ Tech Stack
 
-- Frontend: React (Vite), Axios, Web Speech API, CSS Modules
+- Frontend: React (Vite), Axios, Tailwind CSS
 - Backend: Node.js, Express.js
 - Database: MongoDB (Mongoose)
 - AI Model: Google Gemini API
@@ -25,54 +53,97 @@ An intelligent, voice-activated restaurant booking assistant built with the MERN
 
 ---
 
-## ⚙️ Setup Guide
+## ⚙️ Setup
 
-### 1. Prerequisites
+### Prerequisites
 
-Ensure you have the following installed:
-
-- Node.js (v14 or higher)
+- Node.js (v18 or higher recommended)
 - MongoDB (Local or Atlas)
-- Google Gemini API Key
-- OpenWeatherMap API Key
+- API keys: Google Gemini + OpenWeatherMap
 
----
+### Environment Variables (server/.env)
 
-### 2. Environment Variables (Backend)
-
-Create a `.env` file inside the `server/` folder:
-
-PORT=5000  
-MONGO=your_mongodb_connection_string  
-GEMINI_API_KEY=your_google_gemini_api_key  
-OPENWEATHER_API_KEY=your_openweather_api_key  
+```
+PORT=5000
+MONGO=your_mongodb_connection_string
+GEMINI_API_KEY=your_google_gemini_api_key
+OPENWEATHER_API_KEY=your_openweather_api_key
+```
 
 ---
 
 ## 📦 Installation
 
-### Install Backend
+From the project root:
 
-cd server  
-npm install  
+```bash
+cd server
+npm install
 
-### Install Frontend
-
-cd client  
-npm install  
+cd ../client
+npm install
+```
 
 ---
 
-## 🏃‍♂️ How to Run
+## 🏃 Run the Apps
 
-### Start Backend
+### Start Backend (Express)
 
-cd server  
-node index.js  
-(Server will run at http://localhost:5000)
+```bash
+cd server
+node index.js
+# Optional (if nodemon installed):
+# npx nodemon index.js
+```
 
-### Start Frontend
+- Server listens on `http://localhost:5000`.
+- On startup, the `Restaurant` collection is cleared and reseeded.
 
-cd client  
-npm run dev  
-(Client will run at http://localhost:5173 or similar)
+### Start Frontend (Vite)
+
+```bash
+cd client
+npm run dev
+```
+
+- Vite serves the client at `http://localhost:5173` (default).
+- The client uses `http://localhost:5000/api` as the API base URL (see `client/src/api.js`).
+
+---
+
+## 🔌 API Endpoints
+
+Base URL: `http://localhost:5000/api`
+
+- `GET /restaurants` — List all restaurants.
+- `GET /restaurants/:id` — Get a single restaurant.
+- `POST /chat` — AI conversation; returns `reply`, `bookingDetails`, `intent`.
+- `GET /bookings` — List all bookings.
+- `GET /bookings/:id` — Get one booking.
+- `POST /bookings` — Create a booking; accepts either `restaurantId` or `restaurantName`.
+- `DELETE /bookings/:id` — Cancel a booking.
+
+---
+
+## 📝 Notes & Tips
+
+- CORS is enabled; ensure the client runs on `localhost:5173` or update policy.
+- If using MongoDB Atlas, whitelist your IP and use an SRV connection.
+- Ensure valid `GEMINI_API_KEY` and `OPENWEATHER_API_KEY` or weather/AI features will be limited.
+- Weather lookup expects a date string (YYYY-MM-DD) and optional `{ lat, lon }` coordinates.
+
+### Windows Tips
+
+- Use PowerShell or Command Prompt to run the commands above.
+- If `node` is not recognized, ensure Node.js is added to your PATH and restart the terminal.
+
+---
+
+## ✅ Status
+
+Verified against the current project structure and code:
+- Frontend dev script: `npm run dev` (Vite)
+- Backend entry: `server/index.js`
+- API base URL: `http://localhost:5000/api`
+- Environment variables: `PORT`, `MONGO`, `GEMINI_API_KEY`, `OPENWEATHER_API_KEY`
